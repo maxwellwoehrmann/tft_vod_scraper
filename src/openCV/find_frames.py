@@ -1,6 +1,7 @@
 import cv2
 import os
 import easyocr
+from ..utils import string_match
 
 def match_template(roi, template):
     """Returns True if the template is found with sufficient confidence."""
@@ -8,15 +9,25 @@ def match_template(roi, template):
     _, max_val, _, max_loc = cv2.minMaxLoc(result)
     return max_val >= 0.7, max_loc[0], max_loc[1]  # Return match status and y-coordinate
 
-def find_scouting_frames(video_path, template1_path, template2_path, frame_skip=10):
+def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_dir: str = 'temp/frames'):
+    os.makedirs(output_dir, exist_ok=True)
+
+    game_id = vod['game_id']
+    players = vod['players']
+
+    player_frames = dict()
+    for player in players:
+        player_frames[player] = []
+
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
-    template1 = cv2.imread(template1_path)  # Read in color
-    template2 = cv2.imread(template2_path)  # Read in color
+    template = cv2.imread(template_path)  # Read in color
 
-    timestamps = []
     frame_number = 0
     last_match_y = None  # Store the y-coordinate of the last match
+    index = 0
+
+    bad_frames = []
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -27,62 +38,72 @@ def find_scouting_frames(video_path, template1_path, template2_path, frame_skip=
             frame_number += 1
             continue
 
-        roi = frame[:, -7:]  # Extract rightmost 7 pixels (all rows in color frame)
+        roi = frame[:, -22:]  # Extract rightmost 22 pixels (all rows in color frame)
 
         # Check both templates
-        match1, _, y1, = match_template(roi, template1)
-        match2, _, y2 = match_template(roi, template2)
+        match, _, y, = match_template(roi, template)
 
         # Process potential matches
         save_match = False
         match_y = None
 
-        if match1:
-            if last_match_y is None or abs(y1 - last_match_y) > 3:
+        if match:
+            if last_match_y is None or abs(y - last_match_y) > 3:
                 save_match = True
-                match_y = y1
+                match_y = y
         
-        if match2 and not save_match:  # Only check template2 if template1 didn't match
-            if last_match_y is None or abs(y2 - last_match_y) > 3:
-                save_match = True
-                match_y = y2
-
         if save_match:
             timestamp = round(frame_number / fps, 3)
-            timestamps.append(timestamp)
             last_match_y = match_y
 
             print(f"Match found at {timestamp:.3f} seconds (y={match_y})")
 
+            output_image_path = f"{output_dir}/frame_{game_id}_{index}.jpg"
+            cv2.imwrite(output_image_path, frame)
+
+            # Process the frame directly instead of loading it again
+            found, name = find_name(frame, match_y, players)
+            if found:
+                player_frames[name].append(output_image_path)
+            else:
+                bad_frames.append(output_image_path)
+
+            index += 1
+
         frame_number += 1
 
     cap.release()
-    return timestamps
+    return player_frames, bad_frames
 
-def find_name(image_path, template_path):
-
-    img = cv2.imread(image_path)
-    template = cv2.imread(template_path)  # Read in color
-    roi = img[:, -22:]
-    match, _, y = match_template(roi, template)
-
-    if not match:
-        return False, None
-
+def find_name(frame, y, players):
     x = 1665 #spare margin for long names
 
-    name_subsection = img[y:y+48, x:x+148]
+    name_subsection = frame[y:y+48, x:x+148]
 
-    reader = easyocr.Reader(['en', 'ja'])
-    
+    success, player = read_text(name_subsection, players)
+
+    if not success: #it is possible player was leveling up, or starred up a unit while being scouted.
+        larger_subsection = frame[y-25:y+75, x-70:x+150]
+        cv2.imwrite("temp/expanded_view.jpg", larger_subsection) #debug larger section
+        #try again with a larger field of view
+        success, player = read_text(larger_subsection, players)
+
+    return success, player
+
+def read_text(image, players):
+    reader = easyocr.Reader(['en'])
+
     # Read the image
-    results = reader.readtext(name_subsection)
+    results = reader.readtext(image)
     
+    success = False
+    name = None
     # Returns list of (bounding box, text, confidence)
-    for detection in results:
+    for detection in results: #check all strings found in image, may contain multiple texts for edge cases: starring up unit, leveling up
         print(f"Text: {detection[1]}, Confidence: {detection[2]}")
-    
-    if detection[2] < 0.4:
-        return False, None
+        success, player = string_match.match_ocr_name(players, detection[1])
+        if success:
+            name = player
+            break
 
-    return True, detection[1]
+    return success, name

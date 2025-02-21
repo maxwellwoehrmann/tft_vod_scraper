@@ -51,11 +51,17 @@ def fetch_recent_vods() -> List[Dict]:
         total_start_seconds = h * 3600 + m * 60 + s
         vod_end = format_seconds_to_timestamp(total_start_seconds + game_length)
         
+        players = [
+            player["riot_id"].split('#')[0].lower()
+            for player in match_data["_metatft"]["participant_info"]
+        ]
+
         vod_info = {
             "vod_url": record["twitch_vod"],
             "game_start": vod_start,
             "game_finish": vod_end,
-            "game_id": match_data["info"]["gameId"]
+            "game_id": match_data["info"]["gameId"],
+            "players": players
         }
         vods.append(vod_info)
     
