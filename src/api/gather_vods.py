@@ -31,7 +31,7 @@ def fetch_recent_vods() -> List[Dict]:
     Fetch recent TFT VODs and extract relevant info.
     Returns list of dicts with VOD url and game timing info in HH:MM:SS format.
     """
-    url = "https://api.metatft.com/tft-vods/latest?placement=1,2&limit=1"
+    url = "https://api.metatft.com/tft-vods/latest?placement=1,2&limit=5"
     
     response = requests.get(url)
     response.raise_for_status()
