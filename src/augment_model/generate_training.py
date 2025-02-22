@@ -95,7 +95,7 @@ class TFTTrainingDataGenerator:
         return (random.randint(0, max_x), random.randint(0, max_y))
 
     def generate_sample(self, index: int) -> None:
-        """Generate a single training sample."""
+        """Generate a single training sample with individual augment positions."""
         # Randomly select 1-3 augments and a board
         num_augments = random.randint(1, 3)
         selected_augments = random.sample(self.augment_files, num_augments)
@@ -109,13 +109,10 @@ class TFTTrainingDataGenerator:
             if board.mode != 'RGB':
                 board = board.convert('RGB')
             
-            # First crop the ROI
             board = board.crop((380, 130, 380 + 60, 130 + 40))
-            
-            # Then resize to target size
             board = board.resize(self.board_size, Image.Resampling.LANCZOS)
             
-            # Get random placement coordinates
+            # Get random placement coordinates for whole strip
             x, y = self.get_random_placement(augment_strip.width, augment_strip.height)
             
             # Paste augment strip at random position
@@ -125,9 +122,21 @@ class TFTTrainingDataGenerator:
             output_path = self.output_dir / f'sample_{index:05d}.png'
             board.save(output_path)
         
-        # Store metadata
+        # Store metadata with individual augment positions
+        augment_positions = []
+        for i, augment in enumerate(selected_augments):
+            augment_x = x + (i * (self.augment_size[0] + self.strip_spacing))
+            augment_positions.append({
+                'name': augment.stem,
+                'x': augment_x,
+                'y': y,
+                'width': self.augment_size[0],
+                'height': self.augment_size[1]
+            })
+        
+        # This is the key fix - use augment_positions instead of just names
         self.metadata[f'sample_{index:05d}.png'] = {
-            'augments': [path.stem for path in selected_augments],
+            'augments': augment_positions,  # Use the full position data
             'panel_origin': {'x': x, 'y': y}
         }
 
@@ -152,7 +161,7 @@ def main():
     AUGMENTS_DIR = "assets/augments"
     BOARDS_DIR = "assets/boards"
     OUTPUT_DIR = "assets/generated_training"
-    NUM_SAMPLES = 5000
+    NUM_SAMPLES = 15000
     
     # Configure augment size and spacing
     AUGMENT_SIZE = (30, 30)

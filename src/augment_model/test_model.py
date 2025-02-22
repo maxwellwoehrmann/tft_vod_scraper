@@ -83,9 +83,10 @@ def main():
                         f'model_output/test_images/{Path(jpg_file).stem}.png')
 
     # Configuration
-    MODEL_PATH = "model_output/tft_augment_detector11/weights/best.pt"
+    MODEL_PATH = "model_output/tft_augment_detector/weights/best.pt"
     CLASSES_PATH = "assets/augment_classes.txt"
     TEST_IMAGES_DIR = "model_output/test_images"  
+    # TEST_IMAGES_DIR = "model_output/dataset/val/images"
     
     # Initialize predictor
     predictor = TFTAugmentPredictor(MODEL_PATH, CLASSES_PATH)
