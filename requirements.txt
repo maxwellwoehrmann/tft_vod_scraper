@@ -3,3 +3,8 @@ yt_dlp
 json
 opencv-python
 ffmpeg-python
+ultralytics 
+torch 
+torchvision 
+scikit-learn 
+pyyaml

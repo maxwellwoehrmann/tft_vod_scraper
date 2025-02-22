@@ -34,29 +34,27 @@ class Pipeline:
                 #4. Extract frames
                 player_frames, bad_frames = find_frames.find_scouting_frames(video_path, "assets/selector_template.png", vod)
                 print(player_frames)
-                print(bad_frames)     
-                #player_frames = {'riri': ['temp/frames/frame_496616530_23.jpg'], 'ティエルノ': ['temp/frames/frame_496616530_24.jpg', 'temp/frames/frame_496616530_28.jpg', 'temp/frames/frame_496616530_29.jpg', 'temp/frames/frame_496616530_30.jpg', 'temp/frames/frame_496616530_31.jpg', 'temp/frames/frame_496616530_38.jpg', 'temp/frames/frame_496616530_55.jpg', 'temp/frames/frame_496616530_58.jpg', 'temp/frames/frame_496616530_75.jpg', 'temp/frames/frame_496616530_78.jpg', 'temp/frames/frame_496616530_80.jpg'], 'absjkfbfhjjk': ['temp/frames/frame_496616530_10.jpg', 'temp/frames/frame_496616530_16.jpg', 'temp/frames/frame_496616530_20.jpg', 'temp/frames/frame_496616530_21.jpg', 'temp/frames/frame_496616530_44.jpg', 'temp/frames/frame_496616530_56.jpg', 'temp/frames/frame_496616530_57.jpg', 'temp/frames/frame_496616530_60.jpg', 'temp/frames/frame_496616530_62.jpg', 'temp/frames/frame_496616530_64.jpg', 'temp/frames/frame_496616530_66.jpg', 'temp/frames/frame_496616530_69.jpg'], 'ajuna': ['temp/frames/frame_496616530_8.jpg', 'temp/frames/frame_496616530_19.jpg', 'temp/frames/frame_496616530_35.jpg', 'temp/frames/frame_496616530_42.jpg', 'temp/frames/frame_496616530_50.jpg', 'temp/frames/frame_496616530_54.jpg', 'temp/frames/frame_496616530_59.jpg'], 'tteru': ['temp/frames/frame_496616530_7.jpg', 'temp/frames/frame_496616530_13.jpg', 'temp/frames/frame_496616530_22.jpg', 'temp/frames/frame_496616530_26.jpg', 'temp/frames/frame_496616530_34.jpg', 'temp/frames/frame_496616530_65.jpg', 'temp/frames/frame_496616530_71.jpg'], 'gummmmmmmmi': ['temp/frames/frame_496616530_6.jpg', 'temp/frames/frame_496616530_14.jpg', 'temp/frames/frame_496616530_17.jpg', 'temp/frames/frame_496616530_48.jpg', 'temp/frames/frame_496616530_53.jpg', 'temp/frames/frame_496616530_61.jpg', 'temp/frames/frame_496616530_70.jpg', 'temp/frames/frame_496616530_72.jpg'], 'toyschory': ['temp/frames/frame_496616530_5.jpg', 'temp/frames/frame_496616530_12.jpg', 'temp/frames/frame_496616530_25.jpg'], 'hizashi': ['temp/frames/frame_496616530_2.jpg', 'temp/frames/frame_496616530_4.jpg', 'temp/frames/frame_496616530_11.jpg', 'temp/frames/frame_496616530_18.jpg', 'temp/frames/frame_496616530_37.jpg', 'temp/frames/frame_496616530_40.jpg', 'temp/frames/frame_496616530_45.jpg', 'temp/frames/frame_496616530_47.jpg', 'temp/frames/frame_496616530_68.jpg']}
-                    
+                print(bad_frames)       
                 
-                os.makedirs('temp/augment_frames', exist_ok=True)
-                for player in player_frames:
-                    player_frames[player].reverse()
-                    frames = player_frames[player]
-                    augment1 = None
-                    augment2 = None
-                    augment3 = None
-                    count = 0
-                    for frame in frames:
-                        print(frame)
-                        image = cv2.imread(frame)
-                        best_x, best_y, pixels = identify_augments.detect_augments(image)
-                        if pixels < 800:
-                            print("Three augments not found")
-                        else:
-                            x, y, w, h = 1300+best_x, 280+best_y, 105, 30
-                            image_roi = image[y:y+h, x:x+w]
-                            cv2.imwrite(f'temp/augment_frames/{player}_{count}.jpg', image_roi)
-                        count += 1
+                # os.makedirs('temp/augment_frames', exist_ok=True)
+                # for player in player_frames:
+                #     player_frames[player].reverse()
+                #     frames = player_frames[player]
+                #     augment1 = None
+                #     augment2 = None
+                #     augment3 = None
+                #     count = 0
+                #     for frame in frames:
+                #         print(frame)
+                #         image = cv2.imread(frame)
+                #         best_x, best_y, pixels = identify_augments.detect_augments(image)
+                #         if pixels < 800:
+                #             print("Three augments not found")
+                #         else:
+                #             x, y, w, h = 1300+best_x, 280+best_y, 105, 30
+                #             image_roi = image[y:y+h, x:x+w]
+                #             cv2.imwrite(f'temp/augment_frames/{player}_{count}.jpg', image_roi)
+                #         count += 1
 
                     
 
