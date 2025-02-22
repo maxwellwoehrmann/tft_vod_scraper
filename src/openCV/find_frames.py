@@ -11,6 +11,7 @@ def match_template(roi, template):
 
 def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_dir: str = 'temp/frames'):
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs('temp/augments', exist_ok=True)
 
     game_id = vod['game_id']
     players = vod['players']
@@ -22,12 +23,19 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     template = cv2.imread(template_path)  # Read in color
+    reroll_template = cv2.imread( "templates/reroll_template.jpg")
 
     frame_number = 0
     last_match_y = None  # Store the y-coordinate of the last match
     index = 0
 
+    augment_index = 1
+    augment_cooldown = 0
+
     bad_frames = []
+
+    # Reroll ROI Coordinates
+    x, y, w, h = 900, 830, 120, 65
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -36,7 +44,25 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
 
         if frame_number % frame_skip != 0:  # Skip unnecessary frames
             frame_number += 1
+            augment_cooldown -= 1
             continue
+
+        #check for reroll frame first (augment selection screen)
+        if augment_cooldown <= 0:
+            x, y, w, h = 900, 830, 120, 65
+            reroll_roi = frame[y:y+h, x:x+w]
+            reroll_match, _, _ = match_template(reroll_roi, reroll_template)
+            if reroll_match:
+                x, y, w, h = 895, 330, 140, 140
+                augment_roi = frame[y:y+h, x:x+w]
+
+                output_image_path = f"temp/augments/augment_{augment_index}.jpg"
+                cv2.imwrite(output_image_path, augment_roi)
+
+                print("Found Augment {augment_index}")
+
+                augment_index += 1
+                augment_cooldown = fps * 60 * 5 #sleep this function for 5 minutes
 
         roi = frame[:, -22:]  # Extract rightmost 22 pixels (all rows in color frame)
 
@@ -71,6 +97,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
             index += 1
 
         frame_number += 1
+        augment_cooldown -= 1
 
     cap.release()
     return player_frames, bad_frames
