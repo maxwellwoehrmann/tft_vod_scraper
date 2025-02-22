@@ -25,7 +25,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     template = cv2.imread(template_path)  # Read in color
-    reroll_template = cv2.imread("templates/reroll_template.jpg")
+    reroll_template = cv2.imread("assets/reroll_template.jpg")
 
     frame_number = 0
     last_match_y = None  # Store the y-coordinate of the last match
