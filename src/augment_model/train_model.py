@@ -84,7 +84,7 @@ class TFTAugmentDetector:
             import yaml
             yaml.dump(config, f, default_flow_style=False)
 
-    def train_model(self, epochs=50, batch_size=16):
+    def train_model(self, epochs=18, batch_size=16):
         model = YOLO('yolov8n.pt')
         model.train(
             data=str(self.dataset_dir / 'dataset.yaml'),
@@ -97,8 +97,8 @@ class TFTAugmentDetector:
             verbose=True,
             conf=0.25,
             iou=0.45,
-            lr0=0.01,  # Initial learning rate
-            lrf=0.001,  # Final learning rate
+            lr0=0.005,  # Initial learning rate
+            lrf=0.0005,  # Final learning rate
             cos_lr=True,  # Enable cosine LR scheduler
             momentum=0.937,
             weight_decay=0.0005,
@@ -118,7 +118,7 @@ def main():
     )
     
     detector.prepare_yolo_dataset(train_size=0.8)
-    detector.train_model(epochs=100, batch_size=32)
+    detector.train_model(epochs=50, batch_size=32)
 
 if __name__ == "__main__":
     main()

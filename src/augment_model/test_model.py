@@ -4,63 +4,82 @@ import cv2
 import numpy as np
 import glob
 import os
+from PIL import Image
+
+class ImageNormalizer:
+    @staticmethod
+    def normalize_image(image_path: str) -> np.ndarray:
+        """Normalize image brightness and contrast."""
+        # Read image
+        img = cv2.imread(image_path)
+        
+        # Convert to float32 for processing
+        img_float = img.astype(np.float32)
+        
+        # Normalize to 0-1 range
+        img_norm = cv2.normalize(img_float, None, 0, 255, cv2.NORM_MINMAX)
+        
+        return img_norm.astype(np.uint8)
 
 class TFTAugmentPredictor:
     def __init__(self, model_path: str, classes_path: str):
-        """
-        Initialize predictor with trained model and class names.
-        
-        Args:
-            model_path: Path to the trained YOLO model weights
-            classes_path: Path to text file containing class names
-        """
+        """Initialize predictor with trained model and class names."""
         self.model = YOLO(model_path)
+        self.normalizer = ImageNormalizer()
         
         # Load class names
         with open(classes_path) as f:
             self.classes = [line.strip() for line in f]
     
     def predict_image(self, image_path: str, conf_threshold: float = 0.25):
-        """
-        Run prediction on a single image.
+        """Run prediction on a single image with normalization."""
+        # Normalize the image first
+        normalized_image = self.normalizer.normalize_image(image_path)
         
-        Args:
-            image_path: Path to image file
-            conf_threshold: Confidence threshold for detections
-        """
-        # Run prediction
-        results = self.model.predict(
-            source=image_path,
-            conf=conf_threshold,
-            device='mps'
-        )
+        # Save normalized image to temporary file
+        temp_path = 'temp_normalized.png'
+        cv2.imwrite(temp_path, normalized_image)
         
-        # Process results
-        for result in results:
-            boxes = result.boxes
+        try:
+            # Run prediction on normalized image
+            results = self.model.predict(
+                source=temp_path,
+                conf=conf_threshold,
+                device='mps'
+            )
             
-            detections = []
-            for box in boxes:
-                # Get class name and confidence
-                class_id = int(box.cls[0])
-                class_name = self.classes[class_id]
-                confidence = float(box.conf[0])
+            # Process results
+            for result in results:
+                boxes = result.boxes
                 
-                # Get coordinates (xmin, ymin, xmax, ymax)
-                coords = box.xyxy[0].tolist()
+                detections = []
+                for box in boxes:
+                    # Get class name and confidence
+                    class_id = int(box.cls[0])
+                    class_name = self.classes[class_id]
+                    confidence = float(box.conf[0])
+                    
+                    # Get coordinates
+                    coords = box.xyxy[0].tolist()
+                    
+                    detections.append({
+                        'class': class_name,
+                        'confidence': round(confidence, 3),
+                        'box': coords
+                    })
                 
-                detections.append({
-                    'class': class_name,
-                    'confidence': round(confidence, 3),
-                    'box': coords
-                })
-            
-            # Sort by x-coordinate since augments read left to right
-            detections.sort(key=lambda x: x['box'][0])
-            
-            return detections
+                # Sort by x-coordinate
+                detections.sort(key=lambda x: x['box'][0])
+                
+                return detections
+        
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
 def save_subsection(image_path, x, y, width, height, output_path):
+    """Save normalized subsection of the image."""
     # Read the image
     image = cv2.imread(image_path)
     
@@ -70,23 +89,24 @@ def save_subsection(image_path, x, y, width, height, output_path):
     # Resize the subsection
     resized_img = cv2.resize(subsection, (130, 100), interpolation=cv2.INTER_LANCZOS4)
     
-    # Save the resized subsection
-    cv2.imwrite(output_path, resized_img)
-
+    # Normalize the image
+    normalized = cv2.normalize(resized_img.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
+    
+    # Save the normalized and resized subsection
+    cv2.imwrite(output_path, normalized.astype(np.uint8))
 
 def main():
-    os.makedirs('model_output/test_images', exist_ok=True)
+    os.makedirs('test_images', exist_ok=True)
     
-    # Extract subsections from source images
+    # Extract and normalize subsections from source images
     for jpg_file in glob.glob('temp/frames/*.jpg'):
         save_subsection(jpg_file, 1300, 280, 130, 100, 
-                        f'model_output/test_images/{Path(jpg_file).stem}.png')
+                       f'test_images/{Path(jpg_file).stem}.png')
 
     # Configuration
     MODEL_PATH = "model_output/tft_augment_detector/weights/best.pt"
     CLASSES_PATH = "assets/augment_classes.txt"
-    TEST_IMAGES_DIR = "model_output/test_images"  
-    # TEST_IMAGES_DIR = "model_output/dataset/val/images"
+    TEST_IMAGES_DIR = "test_images"
     
     # Initialize predictor
     predictor = TFTAugmentPredictor(MODEL_PATH, CLASSES_PATH)
@@ -101,7 +121,6 @@ def main():
         # Print detections in order
         for i, det in enumerate(detections, 1):
             print(f"{i}. {det['class']} (confidence: {det['confidence']})")
-
 
 if __name__ == "__main__":
     main()
