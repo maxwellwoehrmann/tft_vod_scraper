@@ -2,7 +2,11 @@
 
 source venv/bin/activate
 
+Git LFS to store a large model file. To clone this repository:
+1. Install Git LFS:
+brew install git-lfs
 
+clone as normal.
 
 here is how to try everything locally:
 
