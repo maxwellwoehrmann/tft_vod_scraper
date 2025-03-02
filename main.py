@@ -15,7 +15,7 @@ class Pipeline:
     def run(self):
         """Execute full pipeline"""
         # 1. Get VODs
-        vods = gather_vods.fetch_recent_vods()
+        vods = gather_vods.fetch_recent_vods(10)
         
         # 2. Filter unprocessed
         unprocessed = mock_db.filter_known_games(vods)

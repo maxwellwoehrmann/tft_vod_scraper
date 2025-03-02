@@ -105,7 +105,6 @@ dragons-spirit
 dualpurpose_iii
 dummify_i
 duo-queue
-epoch (1)
 epoch
 exaltedadventure_iii
 eyeforaneye_i
@@ -243,6 +242,7 @@ symboloffreedom_ii
 t1
 t2
 t3
+tablescraps_i
 tacticianskitchen_iii
 teaming-up-1
 teaming-up-2

@@ -2,14 +2,30 @@
 
 source venv/bin/activate
 
-model exists in model_output/tft_augment_detector11
 
-generate training data with generate_training.py, set number of desired images there
 
-run train_model.py to train new model.
+here is how to try everything locally:
 
-run test_model.py to test on whatever frames are currently in temp/frames 
+start a virtual environment
+install requirements (if you later find any are missing pls add to requirements.txt)
 
-if there are none, run main.py - this should be working atm.
+from the root folder
+run python main.py 
+    this is currently set to just download and assign frames to players from the 10 most recent vods on the list
+    importantly, it saves the frames (in temp/frames), which we can then run
 
-long story short: basically the model sucks lol
+run detect_and_label_augments.py
+    this creates an output folder with labeled detections for all frames im temp/frames. saves the output into augment_results
+
+that's it :D
+
+
+if you want to train the models yourself:
+from root directory run
+    python generate_box_training.py
+    python train_box_model.py
+
+    python generate_augment_training.py
+    python train_augment_model.py
+
+they each have their own testing script you can run as well. just double check that all the paths look good.
