@@ -10,3 +10,4 @@ augment_results/
 yolov8n.pt
 yolov8s.pt
 venv/
+.env

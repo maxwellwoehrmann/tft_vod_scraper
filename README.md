@@ -3,6 +3,10 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
+create a .env, get a riot API key. 
+store it as 
+RIOT_API_KEY=your_key_here
+
 Git LFS to store a large model file. To clone this repository:
 1. Install Git LFS:
 brew install git-lfs
@@ -21,7 +25,7 @@ run python main.py
 
     you can easily edit it to run on only 1 game if preferred
 
-run detect_and_label_augments.py
+run test_augment_detection.py
     this creates an output folder with labeled detections for all frames im temp/frames. saves the output into augment_results
 
 that's it :D
@@ -36,3 +40,9 @@ from root directory run
     python train_augment_model.py
 
 they each have their own testing script you can run as well. just double check that all the paths look good.
+
+
+if you run main.py, it should start to populate data/augment_performance.json
+
+The structure is as follows:
+json_data[augment name][round selected] = [array of placements]

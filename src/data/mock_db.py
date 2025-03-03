@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List, Dict
+import json
 
 def filter_known_games(vods: List[Dict]) -> List[Dict]:
     """
@@ -28,3 +29,27 @@ def add_games_to_csv(vods: List[Dict]) -> None:
    with open(games_file, 'a') as f:
        for vod in vods:
            f.write(f"{vod['game_id']}\n")
+
+def save_results(placements, augment_data, json_path):
+
+    with open(json_path) as f:
+        data = json.load(f)
+
+    print(placements)
+    print(augment_data)
+
+    for placement in placements:
+        p = placement['placement']
+        print(placement['name'].lower())
+        player_augments = augment_data[placement['name'].lower()]
+        for augment_idx in player_augments:
+            augment = player_augments[augment_idx]
+            if augment not in data:
+                data[augment] = dict()
+            if augment_idx not in data[augment]:
+                data[augment][augment_idx] = [p]
+            else:
+                data[augment][augment_idx].append(p)
+    
+    with open(json_path, 'w') as f:
+        json.dump(data, f)

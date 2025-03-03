@@ -56,12 +56,16 @@ def fetch_recent_vods(amnt) -> List[Dict]:
             for player in match_data["_metatft"]["participant_info"]
         ]
 
+
+
         vod_info = {
             "vod_url": record["twitch_vod"],
             "game_start": vod_start,
             "game_finish": vod_end,
             "game_id": match_data["info"]["gameId"],
-            "players": players
+            "match_id": record["match_id"],
+            "players": players,
+            "placement":record["placement"]
         }
         vods.append(vod_info)
     

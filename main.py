@@ -1,4 +1,4 @@
-from src import downloader, gather_vods, mock_db, find_frames, identify_augments
+from src import downloader, gather_vods, mock_db, find_frames, identify_placements, detect_and_label_augments, database
 import logging
 import shutil
 import os
@@ -32,39 +32,24 @@ class Pipeline:
                     continue
                 
                 #4. Extract frames
-                player_frames, bad_frames = find_frames.find_scouting_frames(video_path, "assets/selector_template.png", vod)
+                player_frames, bad_frames, augments = find_frames.find_scouting_frames(video_path, "assets/selector_template.png", vod)
+
+                #5. Detect and label augments
                 print(player_frames)
-                print(bad_frames)       
-                
-                # os.makedirs('temp/augment_frames', exist_ok=True)
-                # for player in player_frames:
-                #     player_frames[player].reverse()
-                #     frames = player_frames[player]
-                #     augment1 = None
-                #     augment2 = None
-                #     augment3 = None
-                #     count = 0
-                #     for frame in frames:
-                #         print(frame)
-                #         image = cv2.imread(frame)
-                #         best_x, best_y, pixels = identify_augments.detect_augments(image)
-                #         if pixels < 800:
-                #             print("Three augments not found")
-                #         else:
-                #             x, y, w, h = 1300+best_x, 280+best_y, 105, 30
-                #             image_roi = image[y:y+h, x:x+w]
-                #             cv2.imwrite(f'temp/augment_frames/{player}_{count}.jpg', image_roi)
-                #         count += 1
+                print(augments)
+                augment_data = detect_and_label_augments.process_images(player_frames, augments)
 
-                    
+                if not augment_data:
+                    print(f"No Augment Data found for VOD {vod['game_id']}")
+                    continue
 
-                # results = [
-                #     self.matcher.analyze_frame(frame)
-                #     for frame in high_res_frames
-                # ]
-                
-                # # 7. Save results
-                # self.database.save_results(vod.id, results)
+                #6. Check final placements 
+                placements = identify_placements.get_tft_match_placements(vod["match_id"])
+                print(vod['players'])
+                print(placements)
+
+                # 7. Save results
+                mock_db.save_results(placements, augment_data, "data/augment_performance.json")
                 
                 # # 8. Cleanup
                 # self._cleanup(video_path, frames)

@@ -2,6 +2,7 @@ import cv2
 import os
 import easyocr
 from ..utils import string_match
+from . import identify_augments
 
 def match_template(roi, template):
     """Returns True if the template is found with sufficient confidence."""
@@ -33,8 +34,10 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
 
     augment_index = 1
     augment_cooldown = 0
+    patience = 0 #wait after first seeing reroll template for augments to fully render on screen 
 
     bad_frames = []
+    augments = []
 
     # Reroll ROI Coordinates
     x, y, w, h = 900, 830, 120, 65
@@ -53,13 +56,13 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
             continue
 
         
-
+        
         #check for reroll frame first (augment selection screen)
         if augment_cooldown <= 0:
             x, y, w, h = 900, 830, 120, 65
             reroll_roi = frame[y:y+h, x:x+w]
             reroll_match, _, _ = match_template(reroll_roi, reroll_template)
-            if reroll_match:
+            if reroll_match and patience >= 30:
                 x, y, w, h = 895, 330, 140, 140
                 augment_roi = frame[y:y+h, x:x+w]
 
@@ -67,10 +70,19 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
                 cv2.imwrite(output_image_path, augment_roi)
 
                 print(f"Found Augment {augment_index}")
+                color = identify_augments.classify_augment(augment_roi)
+                if color:
+                    augments.append(color)
 
                 augment_index += 1
                 augment_cooldown = fps * 60 * 5 #sleep this function for 5 minutes
+                patience = 0
+            else:
+                patience += 1
 
+
+
+        #roi for scouting indicator
         roi = frame[60:850, -22:]  # Extract rightmost 22 pixels (all rows in color frame)
 
         # Check both templates
@@ -108,7 +120,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
 
     cap.release()
 
-    return player_frames, bad_frames
+    return player_frames, bad_frames, augments
 
 def find_name(frame, y, players, reader):
     x = 1665 #spare margin for long names

@@ -1,3 +1,24 @@
+from collections import Counter
+
+def most_frequent_string(string_list):
+  """
+    Finds the most frequent string in a list.
+
+    Args:
+      string_list: A list of strings.
+
+    Returns:
+      The most frequent string in the list.
+      If the list is empty, returns None.
+      If there are multiple strings with the same highest frequency, returns the first one encountered.
+  """
+  if not string_list:
+    return None
+
+  string_counts = Counter(string_list)
+  most_common_string = string_counts.most_common(1)[0][0]
+  return most_common_string
+
 def levenshtein_distance(s1, s2):
     """Calculate the Levenshtein distance between two strings."""
     if len(s1) < len(s2):
