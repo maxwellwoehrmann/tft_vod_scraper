@@ -190,7 +190,17 @@ def generate_dataset(
     
     # Get all augment files
     augment_files = []
-    for file in os.listdir(augments_dir):
+    for file in os.listdir(augments_dir+"/silver"): #silver folder
+        if file.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            file_path = os.path.join(augments_dir, file)
+            augment_files.append(file_path)
+
+    for file in os.listdir(augments_dir+"/gold"): #gold folder
+        if file.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            file_path = os.path.join(augments_dir, file)
+            augment_files.append(file_path)
+    
+    for file in os.listdir(augments_dir+"/prismatic"): #prismatic folder
         if file.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
             file_path = os.path.join(augments_dir, file)
             augment_files.append(file_path)

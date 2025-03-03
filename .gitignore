@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+runs/
+*.DS_Store
+real_world_results/
+results/
+temp/
+training_dataset/
+augment_results/
+yolov8n.pt
+yolov8s.pt
+venv/
