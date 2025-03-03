@@ -360,7 +360,7 @@ if __name__ == "__main__":
     CONFIG = {
         "images_dir": "temp/frames",
         "yolo_model_path": "runs/box_detection/weights/best.pt",
-        "classifier_model_path": "augment_models/augment_classifier.pt",
+        "classifier_model_path": "augment_models/best_model.pth",
         "classes_path": "training_dataset/augment_dataset/class_mapping.json",
         "classifier_model_type": "resnet34",
         "output_base_dir": "augment_results"
