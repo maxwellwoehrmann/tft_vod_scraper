@@ -26,12 +26,12 @@ def format_seconds_to_timestamp(seconds: float) -> str:
     seconds = int(seconds) % 60
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-def fetch_recent_vods() -> List[Dict]:
+def fetch_recent_vods(amnt) -> List[Dict]:
     """
     Fetch recent TFT VODs and extract relevant info.
     Returns list of dicts with VOD url and game timing info in HH:MM:SS format.
     """
-    url = "https://api.metatft.com/tft-vods/latest?placement=1,2&limit=5"
+    url = f"https://api.metatft.com/tft-vods/latest?placement=1,2&limit={amnt}"
     
     response = requests.get(url)
     response.raise_for_status()
