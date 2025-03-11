@@ -15,13 +15,15 @@ from ..utils import string_match
 # Configuration variables - from image_divider.py
 ROI_X = 1270
 ROI_Y = 220
+STREAMER_X = 440
+STREAMER_Y = 180
 ROI_WIDTH = 160
 ROI_HEIGHT = 160
 CONF_THRESHOLD = 0.25
 SUB_IMAGE_WIDTH = 30
 SUB_IMAGE_HEIGHT = 30
 
-def extract_roi(image_path):
+def extract_roi(image_path, streamer):
     """Extract region of interest from a full-sized image"""
     img = cv2.imread(str(image_path))
     if img is None:
@@ -29,8 +31,11 @@ def extract_roi(image_path):
         return None, None
     
     # Extract ROI
-    roi = img[ROI_Y:ROI_Y+ROI_HEIGHT, ROI_X:ROI_X+ROI_WIDTH]
-    
+    if not streamer:
+        roi = img[ROI_Y:ROI_Y+ROI_HEIGHT, ROI_X:ROI_X+ROI_WIDTH]
+    else:
+        roi = img[STREAMER_Y:STREAMER_Y+ROI_HEIGHT, STREAMER_X:STREAMER_X+ROI_WIDTH]
+
     # Check if ROI is valid
     if roi.shape[0] != ROI_HEIGHT or roi.shape[1] != ROI_WIDTH:
         print(f"Warning: Extracted ROI dimensions {roi.shape} don't match expected {ROI_WIDTH}x{ROI_HEIGHT}")
@@ -195,7 +200,7 @@ def split_box(roi, box, base_filename):
     
     return sub_images
 
-def process_images(player_frames, augments):
+def process_images(player_frames, augments, streamer):
     yolo_model_path = "runs/box_detection/weights/best.pt"
     classifier_model_path = "augment_models/best_model.pth"
     classes_path = "training_dataset/augment_dataset/class_mapping.json"
@@ -227,6 +232,7 @@ def process_images(player_frames, augments):
     )
     
     player_predictions = dict()
+    count = 0
 
     # For each player:
     for player in player_frames:
@@ -249,7 +255,13 @@ def process_images(player_frames, augments):
             base_filename = Path(img_path).stem
             
             # Extract ROI
-            full_img, roi = extract_roi(img_path)
+            if player != streamer:
+                full_img, roi = extract_roi(img_path, False)
+            else:
+                full_img, roi = extract_roi(img_path, True)
+                count += 1
+                cv2.imwrite(f"temp/{player}{count}.jpg", roi)
+
             
             if roi is None:
                 print(f"  Failed to extract ROI")

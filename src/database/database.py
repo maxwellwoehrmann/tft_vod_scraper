@@ -125,6 +125,7 @@ def save_results(placements: List[Dict], augment_data: Dict, match_id: str) -> N
     db = connect_to_database()
     
     try:
+        complete_data = True
         # Get the game by match_id
         game = db.games.find_one({"match_id": match_id})
         if not game:
@@ -138,7 +139,11 @@ def save_results(placements: List[Dict], augment_data: Dict, match_id: str) -> N
             
             # Skip if this player's augments weren't detected
             if player_name not in augment_data:
+                complete_data = False
                 continue
+            
+            if len(augment_data[player_name]) != 3:
+                complete_data = False
             
             player_augments = augment_data[player_name]
             augments = []
@@ -165,7 +170,7 @@ def save_results(placements: List[Dict], augment_data: Dict, match_id: str) -> N
                 "$set": {
                     "players": players,
                     "players_analyzed": len(players),
-                    "complete_data": len(players) == 8  # TFT has 8 players per match
+                    "complete_data": complete_data
                 }
             }
         )

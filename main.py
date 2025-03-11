@@ -38,13 +38,13 @@ def process_vod(vod):
         
         # Extract frames
         logger.info(f"Extracting frames for VOD {vod['game_id']}")
-        player_frames, bad_frames, augments = find_frames.find_scouting_frames(
+        player_frames, bad_frames, augments, streamer = find_frames.find_scouting_frames(
             video_path, "assets/selector_template.png", vod
         )
 
         # Detect and label augments
         logger.info(f"Detecting augments for {len(player_frames)} players")
-        augment_data = detect_and_label_augments.process_images(player_frames, augments)
+        augment_data = detect_and_label_augments.process_images(player_frames, augments, streamer)
 
         if not augment_data:
             logger.warning(f"No Augment Data found for VOD {vod['game_id']}")
@@ -65,7 +65,7 @@ def process_vod(vod):
         database.save_results(placements, augment_data, vod["match_id"])
         
         # Cleanup
-        cleanup.cleanup_temp_files(video_path, logger)
+        #cleanup.cleanup_temp_files(video_path, logger)
         
         logger.info(f"Successfully processed VOD {vod['game_id']}")
         return True

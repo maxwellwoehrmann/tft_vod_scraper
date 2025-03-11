@@ -26,21 +26,23 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     template = cv2.imread(template_path)  # Read in color
-    reroll_template = cv2.imread("assets/reroll_template.jpg")
+    #reroll_template = cv2.imread("assets/reroll_template.jpg")
 
     frame_number = 0
     last_match_y = None  # Store the y-coordinate of the last match
     index = 0
 
-    augment_index = 1
-    augment_cooldown = 0
-    patience = 0 #wait after first seeing reroll template for augments to fully render on screen 
+    #augment_index = 1
+    #augment_cooldown = 0
+    #patience = 0 #wait after first seeing reroll template for augments to fully render on screen 
 
     bad_frames = []
     augments = []
 
+    streamer_frames = []
+    streamer_cooldown = 0
     # Reroll ROI Coordinates
-    x, y, w, h = 900, 830, 120, 65
+    #x, y, w, h = 900, 830, 120, 65
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -52,33 +54,33 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
 
         if frame_number % frame_skip != 0:  # Skip unnecessary frames
             frame_number += 1
-            augment_cooldown -= 1
+            streamer_cooldown -= 1
             continue
 
         
         
-        #check for reroll frame first (augment selection screen)
-        if augment_cooldown <= 0:
-            x, y, w, h = 900, 830, 120, 65
-            reroll_roi = frame[y:y+h, x:x+w]
-            reroll_match, _, _ = match_template(reroll_roi, reroll_template)
-            if reroll_match and patience >= 30:
-                x, y, w, h = 895, 330, 140, 140
-                augment_roi = frame[y:y+h, x:x+w]
+        # #check for reroll frame first (augment selection screen)
+        # if augment_cooldown <= 0:
+        #     x, y, w, h = 900, 830, 120, 65
+        #     reroll_roi = frame[y:y+h, x:x+w]
+        #     reroll_match, _, _ = match_template(reroll_roi, reroll_template)
+        #     if reroll_match and patience >= 30:
+        #         x, y, w, h = 895, 330, 140, 140
+        #         augment_roi = frame[y:y+h, x:x+w]
 
-                output_image_path = f"temp/augments/augment_{augment_index}.jpg"
-                cv2.imwrite(output_image_path, augment_roi)
+        #         output_image_path = f"temp/augments/augment_{augment_index}.jpg"
+        #         cv2.imwrite(output_image_path, augment_roi)
 
-                print(f"Found Augment {augment_index}")
-                color = identify_augments.classify_augment(augment_roi)
-                if color:
-                    augments.append(color)
+        #         print(f"Found Augment {augment_index}")
+        #         color = identify_augments.classify_augment(augment_roi)
+        #         if color:
+        #             augments.append(color)
 
-                augment_index += 1
-                augment_cooldown = fps * 60 * 5 #sleep this function for 5 minutes
-                patience = 0
-            else:
-                patience += 1
+        #         augment_index += 1
+        #         augment_cooldown = fps * 60 * 5 #sleep this function for 5 minutes
+        #         patience = 0
+        #     else:
+        #         patience += 1
 
 
 
@@ -97,6 +99,12 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
             if last_match_y is None or abs(y - last_match_y) > 3:
                 save_match = True
                 match_y = y
+        else:
+            if streamer_cooldown <= 0:
+                output_image_path = f"{output_dir}/frame_{game_id}_{index}.jpg"
+                cv2.imwrite(output_image_path, frame)
+                streamer_frames.append(output_image_path)
+                streamer_cooldown = fps * 60 #take a screenshot of the streamers screen every minute
         
         if save_match:
             timestamp = round(frame_number / fps, 3)
@@ -116,11 +124,24 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
             index += 1
 
         frame_number += 1
-        augment_cooldown -= 1
+        streamer_cooldown -= 1
 
     cap.release()
 
-    return player_frames, bad_frames, augments
+    streamer = None #find the player with no frames, this should be the streamer
+    corrupt = False
+    for player in player_frames:
+        if len(player_frames[player]) == 0:
+            if not streamer:
+                streamer = player
+            else: #if we find 2 players without frames, this is a big issue - store no ones data for now
+                corrupt = True
+    
+    if not corrupt:
+        player_frames[streamer] = streamer_frames
+
+
+    return player_frames, bad_frames, augments, streamer
 
 def find_name(frame, y, players, reader):
     x = 1665 #spare margin for long names
