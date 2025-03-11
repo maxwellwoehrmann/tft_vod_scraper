@@ -132,6 +132,7 @@ def save_results(placements: List[Dict], augment_data: Dict, match_id: str) -> N
             logger.warning(f"Game with match_id {match_id} not found when saving results")
             return
         
+        analyzed = 0
         # Construct player data
         players = []
         for placement in placements:
@@ -141,9 +142,10 @@ def save_results(placements: List[Dict], augment_data: Dict, match_id: str) -> N
             if player_name not in augment_data:
                 complete_data = False
                 continue
-            
-            if len(augment_data[player_name]) != 3:
+            elif len(augment_data[player_name]) != 3:
                 complete_data = False
+            else:
+                analyzed += 1
             
             player_augments = augment_data[player_name]
             augments = []
@@ -169,7 +171,7 @@ def save_results(placements: List[Dict], augment_data: Dict, match_id: str) -> N
             {
                 "$set": {
                     "players": players,
-                    "players_analyzed": len(players),
+                    "players_analyzed": analyzed,
                     "complete_data": complete_data
                 }
             }

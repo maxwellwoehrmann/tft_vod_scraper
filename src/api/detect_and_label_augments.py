@@ -15,7 +15,7 @@ from ..utils import string_match
 # Configuration variables - from image_divider.py
 ROI_X = 1270
 ROI_Y = 220
-STREAMER_X = 440
+STREAMER_X = 455
 STREAMER_Y = 180
 ROI_WIDTH = 160
 ROI_HEIGHT = 160
@@ -232,7 +232,6 @@ def process_images(player_frames, augments, streamer):
     )
     
     player_predictions = dict()
-    count = 0
 
     # For each player:
     for player in player_frames:
@@ -259,9 +258,6 @@ def process_images(player_frames, augments, streamer):
                 full_img, roi = extract_roi(img_path, False)
             else:
                 full_img, roi = extract_roi(img_path, True)
-                count += 1
-                cv2.imwrite(f"temp/{player}{count}.jpg", roi)
-
             
             if roi is None:
                 print(f"  Failed to extract ROI")

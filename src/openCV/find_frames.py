@@ -14,7 +14,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs('temp/augments', exist_ok=True)
 
-    reader = easyocr.Reader(['en', 'ja'])
+    reader = easyocr.Reader(['en', 'ch_sim'])
 
     game_id = vod['game_id']
     players = vod['players']
@@ -40,7 +40,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
     augments = []
 
     streamer_frames = []
-    streamer_cooldown = 0
+    streamer_cooldown = fps*60*17 #only start capturing streamer frames after 17 minutes, avg time for 3rd augment arrival
     # Reroll ROI Coordinates
     #x, y, w, h = 900, 830, 120, 65
 
@@ -101,10 +101,10 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
                 match_y = y
         else:
             if streamer_cooldown <= 0:
-                output_image_path = f"{output_dir}/frame_{game_id}_{index}.jpg"
+                output_image_path = f"{output_dir}/frame_zz_{index}.jpg"
                 cv2.imwrite(output_image_path, frame)
                 streamer_frames.append(output_image_path)
-                streamer_cooldown = fps * 60 #take a screenshot of the streamers screen every minute
+                streamer_cooldown = fps * 15 #take a screenshot of the streamers screen every 15 seconds
         
         if save_match:
             timestamp = round(frame_number / fps, 3)

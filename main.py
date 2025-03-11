@@ -74,36 +74,38 @@ def process_vod(vod):
         logger.error(f"Error processing VOD {vod['game_id']}: {e}", exc_info=True)
         return False
 
-def run_pipeline():
+def run_pipeline(batch_size=100, offset=0):
     """Execute full pipeline"""
-    try:
-        # Connect to database
-        database.connect_to_database()
-        
-        # 1. Get VODs
-        logger.info("Fetching recent VODs")
-        vods = gather_vods.fetch_recent_vods(10)
-        
-        # 2. Filter unprocessed using database
-        logger.info(f"Retrieved {len(vods)} VODs, filtering known games")
-        unprocessed = database.filter_known_games(vods)
-        logger.info(f"Found {len(unprocessed)} new VODs to process")
+    while True:
+        try:
+            # Connect to database
+            database.connect_to_database()
+            
+            # 1. Get VODs
+            logger.info("Fetching recent VODs")
+            vods = gather_vods.fetch_recent_vods(batch_size, offset)
+            
+            # 2. Filter unprocessed using database
+            logger.info(f"Retrieved {len(vods)} VODs, filtering known games")
+            unprocessed = database.filter_known_games(vods)
+            logger.info(f"Found {len(unprocessed)} new VODs to process")
 
-        successful_games = []
-        
-        # 3. Process each VOD
-        for vod in unprocessed:
-            success = process_vod(vod)
-            if success:
-                successful_games.append(vod)
+            successful_games = []
+            
+            # 3. Process each VOD
+            for vod in unprocessed:
+                success = process_vod(vod)
+                if success:
+                    successful_games.append(vod)
 
-        logger.info(f"Processed {len(successful_games)} VODs successfully")
-        
-    except Exception as e:
-        logger.error(f"Pipeline execution failed: {e}", exc_info=True)
-    finally:
-        # Close database connection
-        database.close_connection()
+            logger.info(f"Processed {len(successful_games)} VODs successfully")
+            
+        except Exception as e:
+            logger.error(f"Pipeline execution failed: {e}", exc_info=True)
+        finally:
+            # Close database connection
+            database.close_connection()
+            offset += batch_size
 
 if __name__ == "__main__":
     run_pipeline()
