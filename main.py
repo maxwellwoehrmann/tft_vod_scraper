@@ -1,80 +1,109 @@
-from src import downloader, gather_vods, mock_db, find_frames, identify_placements, detect_and_label_augments, database
+from src import downloader, gather_vods, find_frames, identify_placements, detect_and_label_augments, database, cleanup
 import logging
 import shutil
 import os
 import cv2
 
-class Pipeline:
-    #def __init__(self, config_path):
-        #self.twitch_api = TwitchAPI(self.config['api_key'])
-        #self.database = GameDatabase(self.config['db_path'])
-        #self.downloader = VideoDownloader(self.config['output_dir'])
-        #self.frame_extractor = FrameExtractor(self.config['template_path'])
-        #self.matcher = TemplateMatcher(self.config['templates_dir'])
-    
-    def run(self):
-        """Execute full pipeline"""
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("tft_pipeline.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('tft_pipeline')
+
+def process_vod(vod):
+    """Process a single VOD and save results to database"""
+    try:
+        # Store basic game info in database
+        database.add_game({
+            "game_id": vod["game_id"],
+            "match_id": vod["match_id"],
+            "vod_url": vod["vod_url"],
+            "game_start": vod["game_start"],
+            "game_finish": vod["game_finish"],
+            "players_list": vod["players"],  # Raw list of players from API
+        })
+        
+        # Download full vod
+        logger.info(f"Downloading VOD {vod['game_id']}")
+        video_path = downloader.download_vod(vod)
+
+        if not video_path:
+            logger.error(f"Failed to download VOD {vod['game_id']}")
+            return False
+        
+        # Extract frames
+        logger.info(f"Extracting frames for VOD {vod['game_id']}")
+        player_frames, bad_frames, augments = find_frames.find_scouting_frames(
+            video_path, "assets/selector_template.png", vod
+        )
+
+        # Detect and label augments
+        logger.info(f"Detecting augments for {len(player_frames)} players")
+        augment_data = detect_and_label_augments.process_images(player_frames, augments)
+
+        if not augment_data:
+            logger.warning(f"No Augment Data found for VOD {vod['game_id']}")
+            cleanup.cleanup_temp_files(video_path, logger)
+            return False
+
+        # Check final placements 
+        logger.info(f"Getting match placements for {vod['match_id']}")
+        placements = identify_placements.get_tft_match_placements(vod["match_id"])
+        
+        if not placements:
+            logger.error(f"Failed to get placements for match {vod['match_id']}")
+            cleanup.cleanup_temp_files(video_path, logger)
+            return False
+
+        # Save results to database
+        logger.info(f"Saving results to database for {vod['game_id']}")
+        database.save_results(placements, augment_data, vod["match_id"])
+        
+        # Cleanup
+        cleanup.cleanup_temp_files(video_path, logger)
+        
+        logger.info(f"Successfully processed VOD {vod['game_id']}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error processing VOD {vod['game_id']}: {e}", exc_info=True)
+        return False
+
+def run_pipeline():
+    """Execute full pipeline"""
+    try:
+        # Connect to database
+        database.connect_to_database()
+        
         # 1. Get VODs
+        logger.info("Fetching recent VODs")
         vods = gather_vods.fetch_recent_vods(10)
         
-        # 2. Filter unprocessed
-        unprocessed = mock_db.filter_known_games(vods)
+        # 2. Filter unprocessed using database
+        logger.info(f"Retrieved {len(vods)} VODs, filtering known games")
+        unprocessed = database.filter_known_games(vods)
+        logger.info(f"Found {len(unprocessed)} new VODs to process")
 
         successful_games = []
         
+        # 3. Process each VOD
         for vod in unprocessed:
-            try:
-                # 3. Download full vod
-                video_path = downloader.download_vod(vod)
-
-                if not video_path:
-                    print(f"Failed to download VOD {vod['game_id']}")
-                    continue
-                
-                #4. Extract frames
-                player_frames, bad_frames, augments = find_frames.find_scouting_frames(video_path, "assets/selector_template.png", vod)
-
-                #5. Detect and label augments
-                print(player_frames)
-                print(augments)
-                augment_data = detect_and_label_augments.process_images(player_frames, augments)
-
-                if not augment_data:
-                    print(f"No Augment Data found for VOD {vod['game_id']}")
-                    continue
-
-                #6. Check final placements 
-                placements = identify_placements.get_tft_match_placements(vod["match_id"])
-                print(vod['players'])
-                print(placements)
-
-                # 7. Save results
-                mock_db.save_results(placements, augment_data, "data/augment_performance.json")
-                
-                # # 8. Cleanup
-                # self._cleanup(video_path, frames)
-                
-                # # 9. Mark processed
-                # self.database.mark_game_processed(vod.id)
-
+            success = process_vod(vod)
+            if success:
                 successful_games.append(vod)
-                
-            except Exception as e:
-                logging.error(f"Error processing VOD {vod['game_id']}: {e}")
-                continue
 
-            #shutil.rmtree('temp') #clean-up all temp files after processing game
-    
-        if successful_games:
-            mock_db.add_games_to_csv(successful_games)
+        logger.info(f"Processed {len(successful_games)} VODs successfully")
+        
+    except Exception as e:
+        logger.error(f"Pipeline execution failed: {e}", exc_info=True)
+    finally:
+        # Close database connection
+        database.close_connection()
 
 if __name__ == "__main__":
-    # Setup
-
-    #setup_logging()
-    
-    # Initialize and run pipeline
-    #pipeline = Pipeline(config)
-
-    pipeline = Pipeline()
-    pipeline.run()
+    run_pipeline()
