@@ -2,8 +2,9 @@ from src import downloader, gather_vods, find_frames, identify_placements, detec
 from src.utils import logger
 import os
 import cv2
+import argparse
 
-def process_vod(vod):
+def process_vod(vod, debug_mode=False):
     """Process a single VOD and save results to database"""
     log = logger.get_logger(__name__)
     video_path = None
@@ -27,15 +28,17 @@ def process_vod(vod):
             log.error(f"Failed to download VOD {vod['game_id']}")
             return False
         
-        # Extract frames
+        # Extract frames with debug mode if enabled
         log.info(f"Extracting frames for VOD {vod['game_id']}")
         player_frames, bad_frames, augments, streamer = find_frames.find_scouting_frames(
-            video_path, "assets/selector_template.png", vod
+            video_path, "assets/selector_template.png", vod, debug_mode=debug_mode
         )
 
-        # Detect and label augments
+        # Detect and label augments with debug mode if enabled
         log.info(f"Detecting augments for {len(player_frames)} players")
-        augment_data = detect_and_label_augments.process_images(player_frames, augments, streamer)
+        augment_data = detect_and_label_augments.process_images(
+            player_frames, augments, streamer, debug_mode=debug_mode
+        )
 
         if not augment_data:
             log.warning(f"No Augment Data found for VOD {vod['game_id']}")
@@ -55,8 +58,11 @@ def process_vod(vod):
         log.info(f"Saving results to database for {vod['game_id']}")
         database.save_results(placements, augment_data, vod["match_id"])
         
-        # Cleanup
-        cleanup.cleanup_temp_files(video_path)
+        # Cleanup only if not in debug mode
+        if not debug_mode:
+            cleanup.cleanup_temp_files(video_path)
+        else:
+            log.info(f"Debug mode enabled - keeping temporary files for {vod['game_id']}")
         
         log.info(f"Successfully processed VOD {vod['game_id']}")
         return True
@@ -65,13 +71,16 @@ def process_vod(vod):
         log.error(f"Error processing VOD {vod['game_id']}: {e}", exc_info=True)
         return False
     finally:
-        if video_path:
+        if video_path and not debug_mode:
             cleanup.cleanup_temp_files(video_path)
             log.info(f"Cleaned up files for VOD {vod['game_id']}")
 
-def run_pipeline(batch_size=100, offset=0):
+def run_pipeline(batch_size=100, offset=0, debug_mode=False):
     """Execute full pipeline"""
     log = logger.get_logger(__name__)
+    
+    if debug_mode:
+        log.info("DEBUG MODE ENABLED - detailed diagnostics will be saved")
     
     while True:
         try:
@@ -91,7 +100,7 @@ def run_pipeline(batch_size=100, offset=0):
             
             # 3. Process each VOD
             for vod in unprocessed:
-                success = process_vod(vod)
+                success = process_vod(vod, debug_mode=debug_mode)
                 if success:
                     successful_games.append(vod)
 
@@ -105,9 +114,29 @@ def run_pipeline(batch_size=100, offset=0):
             offset += batch_size
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="TFT VOD Analysis Pipeline")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode with detailed diagnostics")
+    parser.add_argument("--batch-size", type=int, default=10, help="Number of VODs to process in one batch")
+    parser.add_argument("--offset", type=int, default=0, help="Starting offset for VOD retrieval")
+    parser.add_argument("--log-level", type=str, default="INFO", 
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR"], 
+                        help="Logging level")
+    
+    args = parser.parse_args()
+    
+    # Convert log level string to corresponding constant
+    log_level_map = {
+        "DEBUG": logger.DEBUG,
+        "INFO": logger.INFO,
+        "WARNING": logger.WARNING,
+        "ERROR": logger.ERROR
+    }
+    log_level = log_level_map.get(args.log_level, logger.INFO)
+    
     # Setup logging for the application
     logger.configure_logger(
-        log_level=logger.INFO,
+        log_level=log_level,
         log_dir="logs",
         app_name="tft_pipeline"
     )
@@ -115,4 +144,14 @@ if __name__ == "__main__":
     log = logger.get_logger(__name__)
     log.info("Starting TFT Pipeline application")
     
-    run_pipeline()
+    if args.debug:
+        log.info("DEBUG MODE ENABLED - Detailed diagnostics will be saved to 'debug' directory")
+        # Create debug directory if it doesn't exist
+        os.makedirs("debug", exist_ok=True)
+    
+    # Run the pipeline with command line args
+    run_pipeline(
+        batch_size=args.batch_size,
+        offset=args.offset,
+        debug_mode=args.debug
+    )

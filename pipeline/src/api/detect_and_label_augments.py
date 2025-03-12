@@ -11,6 +11,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 from matplotlib.gridspec import GridSpec
 from ..utils import string_match, logger
+from ..utils.debug import DebugManager
 
 # Configuration variables - from image_divider.py
 ROI_X = 1270
@@ -23,7 +24,7 @@ CONF_THRESHOLD = 0.25
 SUB_IMAGE_WIDTH = 30
 SUB_IMAGE_HEIGHT = 30
 
-def extract_roi(image_path, streamer):
+def extract_roi(image_path, streamer, debug=None, frame_debug_dir=None):
     """Extract region of interest from a full-sized image"""
     log = logger.get_logger(__name__)
     
@@ -43,6 +44,10 @@ def extract_roi(image_path, streamer):
     # Check if ROI is valid
     if roi.shape[0] != ROI_HEIGHT or roi.shape[1] != ROI_WIDTH:
         log.warning(f"Extracted ROI dimensions {roi.shape} don't match expected {ROI_WIDTH}x{ROI_HEIGHT}")
+    
+    # Save ROI for debugging if requested
+    if debug is not None and frame_debug_dir is not None:
+        debug.save_scouting_frame(roi, frame_debug_dir, suffix="roi")
     
     return img, roi
 
@@ -116,7 +121,7 @@ def load_model(model_path, classes_path, model_type="resnet34"):
         log.error(f"Failed to load model: {e}", exc_info=True)
         raise
 
-def predict_augment(model, image, classes, device, top_k=5):
+def predict_augment(model, image, classes, device, top_k=5, debug=None, frame_debug_dir=None, index=None):
     """Predict the class of a single augment image"""
     log = logger.get_logger(__name__)
     
@@ -164,6 +169,23 @@ def predict_augment(model, image, classes, device, top_k=5):
                 'probability': float(probs[i])
             })
         
+        # Save debug visualization if requested
+        if debug is not None and frame_debug_dir is not None and index is not None:
+            # Convert to numpy array for OpenCV if needed
+            if isinstance(image, Image.Image):
+                img_cv = np.array(image)
+                img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)
+            else:
+                img_cv = image
+            
+            # Save prediction visualization
+            aug_debug_img = cv2.putText(
+                img_cv.copy(), 
+                f"{predictions[0]['class']}: {predictions[0]['probability']:.2f}", 
+                (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1
+            )
+            cv2.imwrite(os.path.join(frame_debug_dir, f"augment_{index}_prediction.jpg"), aug_debug_img)
+        
         top_confidence = predictions[0]['probability'] if predictions else 0
         log.debug(f"Prediction: {predictions[0]['class']} ({top_confidence:.2f})")
         return predictions
@@ -172,7 +194,7 @@ def predict_augment(model, image, classes, device, top_k=5):
         log.error(f"Error during prediction: {e}", exc_info=True)
         return [{'class': 'error', 'probability': 0.0}]
 
-def split_box(roi, box, base_filename):
+def split_box(roi, box, base_filename, debug=None, frame_debug_dir=None, box_index=None):
     """Split detected box into 30x30 sub-images and save them - from image_divider.py"""
     log = logger.get_logger(__name__)
     
@@ -188,6 +210,10 @@ def split_box(roi, box, base_filename):
     # Get dimensions
     box_width = x2 - x1
     box_height = y2 - y1
+    
+    # Save box image for debugging
+    if debug is not None and frame_debug_dir is not None and box_index is not None:
+        cv2.imwrite(os.path.join(frame_debug_dir, f"box_{box_index}_raw.jpg"), box_img)
     
     # Normalize size if slightly off
     expected_height = SUB_IMAGE_HEIGHT
@@ -207,6 +233,10 @@ def split_box(roi, box, base_filename):
         # Just resize to exactly 30x30 if it's a single box or close to it
         resized_img = cv2.resize(box_img, (SUB_IMAGE_WIDTH, SUB_IMAGE_HEIGHT))
         sub_images.append(resized_img)
+        
+        # Save for debugging
+        if debug is not None and frame_debug_dir is not None and box_index is not None:
+            cv2.imwrite(os.path.join(frame_debug_dir, f"box_{box_index}_sub_0.jpg"), resized_img)
     else:
         # Split into multiple boxes
         split_width = box_width / num_splits
@@ -221,11 +251,18 @@ def split_box(roi, box, base_filename):
             # Resize to exactly 30x30
             resized_sub = cv2.resize(sub_img, (SUB_IMAGE_WIDTH, SUB_IMAGE_HEIGHT))
             sub_images.append(resized_sub)
+            
+            # Save for debugging
+            if debug is not None and frame_debug_dir is not None and box_index is not None:
+                cv2.imwrite(os.path.join(frame_debug_dir, f"box_{box_index}_sub_{i}.jpg"), resized_sub)
     
     return sub_images
 
-def process_images(player_frames, augments, streamer):
+def process_images(player_frames, augments, streamer, debug_mode=False):
     log = logger.get_logger(__name__)
+    
+    # Initialize debug manager if debug mode is enabled
+    debug = DebugManager(debug_enabled=debug_mode)
     
     yolo_model_path = "runs/box_detection/weights/best.pt"
     classifier_model_path = "augment_models/best_model.pth"
@@ -277,6 +314,10 @@ def process_images(player_frames, augments, streamer):
     for player in player_frames:
         player_predictions[player] = dict()
         log.info(f"Processing player: {player}")
+        
+        # Set current player in debug manager
+        if debug_mode:
+            debug.set_current_vod(f"player_{player}")
 
         # Get image files
         image_files = player_frames[player]
@@ -288,15 +329,20 @@ def process_images(player_frames, augments, streamer):
             log.info(f"Analyzing {len(image_files)} augment image files for {player}")
         
         # Process each image
-        for img_path in image_files:
+        for img_count, img_path in enumerate(image_files):
             base_filename = Path(img_path).stem
             log.debug(f"Processing image: {base_filename}")
             
+            # Create debug directory for this frame
+            frame_debug_dir = None
+            if debug_mode:
+                frame_debug_dir = debug.create_frame_folder(player, img_count)
+            
             # Extract ROI
             if player != streamer:
-                full_img, roi = extract_roi(img_path, False)
+                full_img, roi = extract_roi(img_path, False, debug, frame_debug_dir)
             else:
-                full_img, roi = extract_roi(img_path, True)
+                full_img, roi = extract_roi(img_path, True, debug, frame_debug_dir)
             
             if roi is None:
                 log.warning(f"Failed to extract ROI from {img_path}")
@@ -310,6 +356,12 @@ def process_images(player_frames, augments, streamer):
                     verbose=False
                 )
                 
+                # Save box detection visualization for debugging
+                if debug_mode and frame_debug_dir:
+                    if len(detection_results) > 0:
+                        result_img = detection_results[0].plot()
+                        cv2.imwrite(os.path.join(frame_debug_dir, "box_detection.jpg"), result_img)
+                
                 # Check if any boxes detected
                 if len(detection_results) > 0 and len(detection_results[0].boxes) > 0:
                     boxes = detection_results[0].boxes.data.cpu().numpy()
@@ -322,13 +374,17 @@ def process_images(player_frames, augments, streamer):
                     # Split boxes and get sub-images
                     all_sub_images = []
                     
-                    for box in boxes:
+                    for box_idx, box in enumerate(boxes):
                         sub_images = split_box(
-                            roi, box, base_filename
+                            roi, box, base_filename, debug, frame_debug_dir, box_idx
                         )
                         index = 0
-                        for sub_img in sub_images:
-                            preds = predict_augment(classifier, sub_img, classes, device, top_k=5)
+                        for sub_idx, sub_img in enumerate(sub_images):
+                            preds = predict_augment(
+                                classifier, sub_img, classes, device, top_k=5,
+                                debug=debug, frame_debug_dir=frame_debug_dir, 
+                                index=f"{box_idx}_{sub_idx}"
+                            )
 
                             if preds[0]['probability'] < 0.8:
                                 log.warning(f"Low confidence ({preds[0]['probability']:.2f}) for {player}, image: {img_path}")

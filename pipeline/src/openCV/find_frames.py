@@ -2,6 +2,7 @@ import cv2
 import os
 import easyocr
 from ..utils import string_match, logger
+from ..utils.debug import DebugManager
 from . import identify_augments
 
 def match_template(roi, template):
@@ -10,7 +11,7 @@ def match_template(roi, template):
     _, max_val, _, max_loc = cv2.minMaxLoc(result)
     return max_val >= 0.62, max_loc[0], max_loc[1]  # Return match status and y-coordinate
 
-def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_dir: str = 'temp/frames'):
+def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_dir: str = 'temp/frames', debug_mode=False):
     """
     Find frames that show player scouting to extract augment data
     
@@ -20,11 +21,17 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
         vod: VOD information dictionary
         frame_skip: Number of frames to skip between checks
         output_dir: Directory to save extracted frames
+        debug_mode: Whether to enable debug mode
         
     Returns:
         tuple of: (player_frames, bad_frames, augments, streamer)
     """
     log = logger.get_logger(__name__)
+    
+    # Initialize debug manager if debug mode is enabled
+    debug = DebugManager(debug_enabled=debug_mode)
+    if debug_mode:
+        debug.set_current_vod(vod['game_id'])
     
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs('temp/augments', exist_ok=True)
@@ -33,6 +40,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
     log.debug(f"Video path: {video_path}")
     log.debug(f"Template path: {template_path}")
     log.debug(f"Frame skip interval: {frame_skip}")
+    log.debug(f"Debug mode: {debug_mode}")
 
     reader = easyocr.Reader(['en', 'ch_sim'])
     ja_reader = easyocr.Reader(['ja'])
@@ -131,12 +139,52 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
                 cv2.imwrite(output_image_path, frame)
                 log.debug(f"Saved match frame: {output_image_path}")
 
-                # Process the frame directly instead of loading it again
-                found, name = find_name(frame, match_y, players, reader, ja_reader)
+                # Create a debug folder for this frame regardless of whether we find a player
+                frame_debug_dir = None
+                if debug_mode:
+                    # Use a temporary folder name until we know if we found a player
+                    frame_debug_dir = debug.create_frame_folder("frame", index, timestamp)
+                    # Save full scouting frame
+                    debug.save_scouting_frame(frame, frame_debug_dir)
+                
+                # Process the frame directly instead of loading it again, passing the debug dir
+                found, name, used_extended = find_name(frame, match_y, players, reader, ja_reader, debug_mode, debug, frame_debug_dir)
+                
                 if found:
+                    # If we found a player and debug is enabled, rename the folder to the player's name
+                    if debug_mode:
+                        # Extract ROI for box detection and augment detection
+                        augment_roi_x = 1270
+                        augment_roi_y = 220
+                        augment_roi_width = 160
+                        augment_roi_height = 160
+                        augment_roi = frame[augment_roi_y:augment_roi_y+augment_roi_height, 
+                                        augment_roi_x:augment_roi_x+augment_roi_width]
+                        
+                        # Save box detection debug
+                        debug.save_box_detection(augment_roi, frame_debug_dir)
+                        
+                        # Rename the folder to include the player name
+                        new_dir = os.path.join(os.path.dirname(frame_debug_dir), f"{name}_frame_{index}_t{timestamp:.1f}")
+                        try:
+                            os.rename(frame_debug_dir, new_dir)
+                            frame_debug_dir = new_dir
+                        except Exception as e:
+                            log.error(f"Failed to rename debug directory: {e}")
+                    
                     log.info(f"Identified player: {name}")
                     player_frames[name].append(output_image_path)
                 else:
+                    # Keep the frame debug dir as "unidentified"
+                    if debug_mode:
+                        # Rename the folder to indicate unidentified frame
+                        new_dir = os.path.join(os.path.dirname(frame_debug_dir), f"unidentified_frame_{index}_t{timestamp:.1f}")
+                        try:
+                            os.rename(frame_debug_dir, new_dir)
+                            frame_debug_dir = new_dir
+                        except Exception as e:
+                            log.error(f"Failed to rename debug directory: {e}")
+                    
                     log.warning(f"Failed to identify player in frame {index}")
                     bad_frames.append(output_image_path)
                 index += 1
@@ -177,23 +225,55 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
 
     return player_frames, bad_frames, augments, streamer
 
-def find_name(frame, y, players, reader, ja_reader=None):
+def find_name(frame, y, players, reader, ja_reader=None, debug_mode=False, debug=None, frame_debug_dir=None):
     """Find and identify player name in the frame"""
     log = logger.get_logger(__name__)
     
     x = 1665  # spare margin for long names
     name_subsection = frame[y:y+48, x:x+148]
 
-    success, player = read_text(name_subsection, players, reader, ja_reader)
-    log.debug(f"First OCR attempt: {'Success' if success else 'Failed'}")
+    # Create debug visuals for standard OCR region
+    if debug_mode and debug is not None and frame_debug_dir is not None:
+        debug.save_ocr_debug(name_subsection, players, frame_debug_dir, name_y=y)
+        
+        # Add detailed debugging information to a text file
+        with open(os.path.join(frame_debug_dir, "debug_info.txt"), "w") as f:
+            f.write("DEBUGGING PLAYER IDENTIFICATION\n")
+            f.write("==============================\n\n")
+            
+            # 1. Write the exact player list being passed in
+            f.write("1. Player List Being Used:\n")
+            f.write("-----------------------\n")
+            for i, player in enumerate(players):
+                f.write(f"  {i+1}. '{player}'\n")
+            f.write("\n")
 
+    success, player = read_text(name_subsection, players, reader, ja_reader, debug_mode, frame_debug_dir)
+    log.debug(f"First OCR attempt: {'Success' if success else 'Failed'}")
+    
+    used_extended = False
     if not success:  # it is possible player was leveling up, or starred up a unit while being scouted
         larger_subsection = frame[y-25:y+75, x-70:x+150]
         log.debug("Trying with expanded view")
-        success, player = read_text(larger_subsection, players, reader, ja_reader)
+        
+        # Create debug visuals for extended OCR region
+        if debug_mode and debug is not None and frame_debug_dir is not None:
+            debug.save_ocr_debug(larger_subsection, players, frame_debug_dir, name_y=y, extended=True)
+        
+        success, player = read_text(larger_subsection, players, reader, ja_reader, debug_mode, frame_debug_dir)
+        used_extended = True
         log.debug(f"Second OCR attempt: {'Success' if success else 'Failed'}")
 
-    return success, player
+    # Add final result information to debug file
+    if debug_mode and frame_debug_dir:
+        with open(os.path.join(frame_debug_dir, "debug_info.txt"), "a") as f:
+            f.write("\n3. Final Result from find_name():\n")
+            f.write("-----------------------------\n")
+            f.write(f"  Success: {success}\n")
+            f.write(f"  Player: {player if player else 'None'}\n")
+            f.write(f"  Used Extended Region: {used_extended}\n")
+
+    return success, player, used_extended
 
 def preprocess_for_ocr(image):
     """
@@ -248,7 +328,7 @@ def process_ocr_results(results, players, log):
     
     return False, None
 
-def read_text(image, players, reader, ja_reader=None):
+def read_text(image, players, reader, ja_reader=None, debug_mode=False, frame_debug_dir=None):
     """
     Read and match text from image to a known player.
     
@@ -257,6 +337,8 @@ def read_text(image, players, reader, ja_reader=None):
         players: List of player names to match against
         reader: Primary OCR reader
         ja_reader: Japanese OCR reader (optional)
+        debug_mode: Whether debug mode is enabled
+        frame_debug_dir: Directory to save debug information
         
     Returns:
         Tuple of (success, player_name)
@@ -270,6 +352,21 @@ def read_text(image, players, reader, ja_reader=None):
     results = reader.readtext(processed_image)
     log.debug(f"Primary OCR found {len(results)} text regions")
     
+    # Debug OCR results
+    if debug_mode and frame_debug_dir:
+        with open(os.path.join(frame_debug_dir, "debug_info.txt"), "a") as f:
+            f.write("\n2. OCR Results and String Matching:\n")
+            f.write("-------------------------------\n")
+            f.write("\nPrimary OCR Results:\n")
+            for i, detection in enumerate(results):
+                text = detection[1]
+                confidence = detection[2]
+                f.write(f"  Result {i+1}: '{text}' (confidence: {confidence:.4f})\n")
+                
+                # Call string matching and record results
+                success, matched_player = string_match.match_ocr_name(players, text)
+                f.write(f"    String Match Result: success={success}, player='{matched_player}'\n")
+    
     # Process primary OCR results
     success, name = process_ocr_results(results, players, log)
     
@@ -278,6 +375,19 @@ def read_text(image, players, reader, ja_reader=None):
         log.debug("Attempting text recognition with Japanese OCR reader")
         ja_results = ja_reader.readtext(processed_image)
         log.debug(f"Japanese OCR found {len(ja_results)} text regions")
+        
+        # Debug Japanese OCR results
+        if debug_mode and frame_debug_dir:
+            with open(os.path.join(frame_debug_dir, "debug_info.txt"), "a") as f:
+                f.write("\nJapanese OCR Results:\n")
+                for i, detection in enumerate(ja_results):
+                    text = detection[1]
+                    confidence = detection[2]
+                    f.write(f"  Result {i+1}: '{text}' (confidence: {confidence:.4f})\n")
+                    
+                    # Call string matching and record results
+                    success, matched_player = string_match.match_ocr_name(players, text)
+                    f.write(f"    String Match Result: success={success}, player='{matched_player}'\n")
         
         # Process Japanese OCR results
         success, name = process_ocr_results(ja_results, players, log)

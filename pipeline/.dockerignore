@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+logs/
+temp/
+runs/
+*.mp4
+*.pth
+.git/
+.github/
+.gitignore

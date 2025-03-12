@@ -45,26 +45,30 @@ def match_ocr_name(actual_players, ocr_result):
     
     Args:
         actual_players (list): List of actual player names
-        ocr_results (dict): Dictionary of OCR-detected names and their frame paths
+        ocr_result (str): OCR-detected name string
         
     Returns:
-        dict: Dictionary mapping actual player names to their associated frames
+        tuple: (success, player_name) indicating whether a match was found and the matched player name
     """
     matched_results = {}
     
     ocr_name_lower = ocr_result.lower()
     
     # Calculate distances to all actual player names
-    distances = [
-        (levenshtein_distance(ocr_name_lower, player_name), i)
-        for i, player_name in enumerate(actual_players)
-    ]
+    distances = []
+    for i, player_name in enumerate(actual_players):
+        player_lower = player_name.lower()
+        dist = levenshtein_distance(ocr_name_lower, player_lower)
+        distances.append((dist, i))
     
     # Find the closest match
-    min_distance, closest_index = min(distances, key=lambda x: x[0])
-    closest_player = actual_players[closest_index]
+    if distances:
+        min_distance, closest_index = min(distances, key=lambda x: x[0])
+        closest_player = actual_players[closest_index]
 
-    if min_distance > 4:
+        if min_distance > 4:
+            return False, None
+        
+        return True, closest_player
+    else:
         return False, None
-    
-    return True, closest_player
