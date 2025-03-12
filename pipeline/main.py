@@ -6,6 +6,7 @@ import cv2
 def process_vod(vod):
     """Process a single VOD and save results to database"""
     log = logger.get_logger(__name__)
+    video_path = None
     
     try:
         # Store basic game info in database
@@ -15,7 +16,7 @@ def process_vod(vod):
             "vod_url": vod["vod_url"],
             "game_start": vod["game_start"],
             "game_finish": vod["game_finish"],
-            "players_list": vod["players"],  # Raw list of players from API
+            "players_list": vod["players"],
         })
         
         # Download full vod
@@ -63,6 +64,10 @@ def process_vod(vod):
     except Exception as e:
         log.error(f"Error processing VOD {vod['game_id']}: {e}", exc_info=True)
         return False
+    finally:
+        if video_path:
+            cleanup.cleanup_temp_files(video_path)
+            log.info(f"Cleaned up files for VOD {vod['game_id']}")
 
 def run_pipeline(batch_size=100, offset=0):
     """Execute full pipeline"""
