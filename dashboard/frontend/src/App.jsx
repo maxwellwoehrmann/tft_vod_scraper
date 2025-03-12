@@ -6,7 +6,7 @@ function App() {
   const [augments, setAugments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [minGames, setMinGames] = useState(5);
+  const [minGames, setMinGames] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: 'avg_placement', direction: 'asc' });
   const [error, setError] = useState(null);
 
