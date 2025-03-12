@@ -35,6 +35,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
     log.debug(f"Frame skip interval: {frame_skip}")
 
     reader = easyocr.Reader(['en', 'ch_sim'])
+    ja_reader = easyocr.Reader(['ja'])
     log.debug("Initialized OCR reader")
 
     game_id = vod['game_id']
@@ -131,7 +132,7 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
                 log.debug(f"Saved match frame: {output_image_path}")
 
                 # Process the frame directly instead of loading it again
-                found, name = find_name(frame, match_y, players, reader)
+                found, name = find_name(frame, match_y, players, reader, ja_reader)
                 if found:
                     log.info(f"Identified player: {name}")
                     player_frames[name].append(output_image_path)
@@ -176,42 +177,64 @@ def find_scouting_frames(video_path, template_path, vod, frame_skip=10, output_d
 
     return player_frames, bad_frames, augments, streamer
 
-def find_name(frame, y, players, reader):
+def find_name(frame, y, players, reader, ja_reader=None):
     """Find and identify player name in the frame"""
     log = logger.get_logger(__name__)
     
-    x = 1665 #spare margin for long names
-
+    x = 1665  # spare margin for long names
     name_subsection = frame[y:y+48, x:x+148]
 
-    success, player = read_text(name_subsection, players, reader)
+    success, player = read_text(name_subsection, players, reader, ja_reader)
     log.debug(f"First OCR attempt: {'Success' if success else 'Failed'}")
 
-    if not success: #it is possible player was leveling up, or starred up a unit while being scouted.
+    if not success:  # it is possible player was leveling up, or starred up a unit while being scouted
         larger_subsection = frame[y-25:y+75, x-70:x+150]
-        # For debugging: save the expanded view
-        #cv2.imwrite("temp/expanded_view.jpg", larger_subsection)
         log.debug("Trying with expanded view")
-        #try again with a larger field of view
-        success, player = read_text(larger_subsection, players, reader)
+        success, player = read_text(larger_subsection, players, reader, ja_reader)
         log.debug(f"Second OCR attempt: {'Success' if success else 'Failed'}")
 
     return success, player
 
-def read_text(image, players, reader):
-    """Read and match text from image to a known player"""
-    log = logger.get_logger(__name__)
+def preprocess_for_ocr(image):
+    """
+    Preprocess image to improve OCR accuracy.
     
-    # Read the image
-    results = reader.readtext(image)
+    Args:
+        image: Input image to process
+        
+    Returns:
+        Processed image optimized for OCR
+    """
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    success = False
-    name = None
+    # Apply slight Gaussian blur to reduce noise
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
     
-    log.debug(f"OCR found {len(results)} text regions")
+    # Apply adaptive thresholding
+    thresh = cv2.adaptiveThreshold(
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        cv2.THRESH_BINARY, 11, 2
+    )
     
-    # Returns list of (bounding box, text, confidence)
-    for detection in results: #check all strings found in image, may contain multiple texts for edge cases: starring up unit, leveling up
+    # Convert back to BGR for OCR compatibility
+    processed = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    
+    return processed
+
+def process_ocr_results(results, players, log):
+    """
+    Process OCR results and try to match to a player name.
+    
+    Args:
+        results: List of OCR detection results
+        players: List of player names to match against
+        log: Logger instance
+        
+    Returns:
+        Tuple of (success, player_name)
+    """
+    for detection in results:
         text = detection[1]
         confidence = detection[2]
         log.debug(f"OCR text: '{text}', confidence: {confidence:.4f}")
@@ -219,12 +242,47 @@ def read_text(image, players, reader):
         success, player = string_match.match_ocr_name(players, text)
         if success:
             log.debug(f"Matched OCR text '{text}' to player '{player}'")
-            name = player
-            break
+            return True, player
         else:
             log.debug(f"No match found for OCR text: '{text}'")
+    
+    return False, None
 
-    if not success:
-        log.debug("No matching player found in OCR results")
+def read_text(image, players, reader, ja_reader=None):
+    """
+    Read and match text from image to a known player.
+    
+    Args:
+        image: The image containing potential player name
+        players: List of player names to match against
+        reader: Primary OCR reader
+        ja_reader: Japanese OCR reader (optional)
         
+    Returns:
+        Tuple of (success, player_name)
+    """
+    log = logger.get_logger(__name__)
+    
+    # Pre-process the image
+    processed_image = preprocess_for_ocr(image)
+    
+    # Try with primary reader
+    results = reader.readtext(processed_image)
+    log.debug(f"Primary OCR found {len(results)} text regions")
+    
+    # Process primary OCR results
+    success, name = process_ocr_results(results, players, log)
+    
+    # If no match found, try Japanese reader if available
+    if not success and ja_reader is not None:
+        log.debug("Attempting text recognition with Japanese OCR reader")
+        ja_results = ja_reader.readtext(processed_image)
+        log.debug(f"Japanese OCR found {len(ja_results)} text regions")
+        
+        # Process Japanese OCR results
+        success, name = process_ocr_results(ja_results, players, log)
+    
+    if not success:
+        log.debug("No matching player found in any OCR results")
+    
     return success, name

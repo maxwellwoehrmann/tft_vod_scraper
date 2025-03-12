@@ -64,7 +64,7 @@ def match_ocr_name(actual_players, ocr_result):
     min_distance, closest_index = min(distances, key=lambda x: x[0])
     closest_player = actual_players[closest_index]
 
-    if min_distance > 3:
+    if min_distance > 4:
         return False, None
     
     return True, closest_player

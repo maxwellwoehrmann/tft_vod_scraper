@@ -20,7 +20,7 @@ echo
 
 # Build the Docker image specifically for x86_64
 echo "Building Docker image for x86_64..."
-docker build --no-cache --platform linux/amd64 -t $DOCKER_USERNAME/$IMAGE_NAME:$TAG .
+docker build --platform linux/amd64 -t $DOCKER_USERNAME/$IMAGE_NAME:$TAG .
 
 # Push to Docker Hub
 echo "Pushing to Docker Hub..."
