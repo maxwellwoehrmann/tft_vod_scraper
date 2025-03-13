@@ -378,6 +378,10 @@ def process_images(player_frames, augments, streamer, debug_mode=False):
                         sub_images = split_box(
                             roi, box, base_filename, debug, frame_debug_dir, box_idx
                         )
+                        
+                        # Collect predictions for debug
+                        frame_predictions = []
+                        
                         index = 0
                         for sub_idx, sub_img in enumerate(sub_images):
                             preds = predict_augment(
@@ -385,6 +389,9 @@ def process_images(player_frames, augments, streamer, debug_mode=False):
                                 debug=debug, frame_debug_dir=frame_debug_dir, 
                                 index=f"{box_idx}_{sub_idx}"
                             )
+                            
+                            # Store full predictions for debugging
+                            frame_predictions.append(preds)
 
                             if preds[0]['probability'] < 0.8:
                                 log.warning(f"Low confidence ({preds[0]['probability']:.2f}) for {player}, image: {img_path}")
@@ -395,6 +402,37 @@ def process_images(player_frames, augments, streamer, debug_mode=False):
                                 player_predictions[player][index] = [preds[0]['class']]
 
                             index += 1
+                        
+                        # Save detailed augment predictions to debug file
+                        if debug_mode and frame_debug_dir:
+                            # Save prediction details using an alternative method that doesn't re-predict
+                            with open(os.path.join(frame_debug_dir, "augment_predictions.txt"), 'w') as f:
+                                f.write("Augment Classification Results\n")
+                                f.write("============================\n\n")
+                                
+                                for sub_idx, preds in enumerate(frame_predictions):
+                                    f.write(f"Augment {sub_idx+1}:\n")
+                                    f.write("-----------\n")
+                                    
+                                    for j, pred in enumerate(preds):
+                                        f.write(f"  {j+1}. {pred['class']}: {pred['probability']:.4f}\n")
+                                    
+                                    f.write("\n")
+                                
+                                # Add information about aggregated predictions
+                                f.write("\nAggregated Statistics (All frames for this player):\n")
+                                f.write("----------------------------------------------\n")
+                                for i in range(3):
+                                    if i in player_predictions[player]:
+                                        all_preds = player_predictions[player][i]
+                                        f.write(f"Augment {i}: {len(all_preds)} total predictions\n")
+                                        
+                                        # Count occurrences of each prediction
+                                        from collections import Counter
+                                        pred_counts = Counter(all_preds)
+                                        for pred, count in pred_counts.most_common(5):
+                                            f.write(f"  '{pred}': {count} occurrences\n")
+                                        f.write("\n")
                 else:
                     log.debug(f"No boxes detected in {img_path}")
             

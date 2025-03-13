@@ -276,29 +276,11 @@ def find_name(frame, y, players, reader, ja_reader=None, debug_mode=False, debug
     return success, player, used_extended
 
 def preprocess_for_ocr(image):
-    """
-    Preprocess image to improve OCR accuracy.
-    
-    Args:
-        image: Input image to process
-        
-    Returns:
-        Processed image optimized for OCR
-    """
-    # Convert to grayscale
+
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # Apply slight Gaussian blur to reduce noise
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    
-    # Apply adaptive thresholding
-    thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-        cv2.THRESH_BINARY, 11, 2
-    )
-    
     # Convert back to BGR for OCR compatibility
-    processed = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    processed = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     
     return processed
 

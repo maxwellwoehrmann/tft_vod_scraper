@@ -346,7 +346,7 @@ class DebugManager:
     
     def save_box_detection(self, roi, frame_dir, model_path="runs/box_detection/weights/best.pt"):
         """
-        Save box detection visualization
+        Save box detection visualization and detailed text information
         
         Args:
             roi: Region of interest image
@@ -376,6 +376,19 @@ class DebugManager:
                 if len(detection_results[0].boxes) > 0:
                     boxes = detection_results[0].boxes.data.cpu().numpy()
                     
+                    # Save detailed box information to text file
+                    with open(os.path.join(frame_dir, "box_detection_details.txt"), 'w') as f:
+                        f.write("Box Detection Results\n")
+                        f.write("====================\n\n")
+                        f.write(f"Total boxes detected: {len(boxes)}\n\n")
+                        
+                        for i, box in enumerate(boxes):
+                            x1, y1, x2, y2, conf, cls = box
+                            f.write(f"Box {i+1}:\n")
+                            f.write(f"  Position: [{int(x1)}, {int(y1)}, {int(x2)}, {int(y2)}]\n")
+                            f.write(f"  Confidence: {conf:.4f}\n")
+                            f.write(f"  Size: {int(x2-x1)}x{int(y2-y1)} pixels\n\n")
+                    
                     for i, box in enumerate(boxes):
                         x1, y1, x2, y2, conf, cls = box
                         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
@@ -383,10 +396,23 @@ class DebugManager:
                         # Extract the box image
                         box_img = roi[y1:y2, x1:x2]
                         cv2.imwrite(os.path.join(frame_dir, f"box_{i+1}_conf_{conf:.2f}.jpg"), box_img)
+                else:
+                    # No detection, save this information
+                    with open(os.path.join(frame_dir, "box_detection_details.txt"), 'w') as f:
+                        f.write("Box Detection Results\n")
+                        f.write("====================\n\n")
+                        f.write("No boxes detected in this frame.\n")
+                    
             else:
                 # No detection, just save original ROI
                 cv2.imwrite(os.path.join(frame_dir, "box_detection.jpg"), roi)
                 
+                # Save empty detection result
+                with open(os.path.join(frame_dir, "box_detection_details.txt"), 'w') as f:
+                    f.write("Box Detection Results\n")
+                    f.write("====================\n\n")
+                    f.write("No detection results available for this frame.\n")
+                    
         except Exception as e:
             print(f"Error in box detection debug: {e}")
     
@@ -406,7 +432,7 @@ class DebugManager:
         """
         if not self.debug_enabled or not frame_dir:
             return
-            
+                
         try:
             # Load model and class mapping
             model, classes, device = self._load_classification_model(
@@ -414,18 +440,24 @@ class DebugManager:
             )
             
             # Process each augment image
+            all_predictions = []
             for i, img in enumerate(augment_images):
                 # Make prediction
                 predictions = self._predict_augment(model, img, classes, device, top_k=5)
+                all_predictions.append(predictions)
                 
                 # Create visualization
                 self._visualize_augment_prediction(
                     img, predictions, 
                     os.path.join(frame_dir, f"augment_{i+1}_prediction.jpg")
                 )
-                
+            
+            # Save detailed text predictions
+            self.save_augment_prediction_text(augment_images, all_predictions, frame_dir)
+                    
         except Exception as e:
             print(f"Error in augment prediction debug: {e}")
+
     
     def _load_classification_model(self, model_path, classes_path, model_type="resnet34"):
         """Load classification model for augment prediction"""
@@ -565,3 +597,33 @@ class DebugManager:
         plt.tight_layout()
         plt.savefig(output_path)
         plt.close(fig)
+
+    def save_augment_prediction_text(self, augment_images, predictions, frame_debug_dir):
+        """
+        Save detailed augment predictions to a text file
+        
+        Args:
+            augment_images: List of augment images
+            predictions: List of prediction results for each augment
+            frame_debug_dir: Debug directory for this frame
+        """
+        if not self.debug_enabled or not frame_debug_dir:
+            return
+            
+        output_path = os.path.join(frame_debug_dir, "augment_predictions.txt")
+        
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write("Augment Classification Results\n")
+                f.write("============================\n\n")
+                
+                for i, preds in enumerate(predictions):
+                    f.write(f"Augment {i+1}:\n")
+                    f.write("-----------\n")
+                    
+                    for j, pred in enumerate(preds):
+                        f.write(f"  {j+1}. {pred['class']}: {pred['probability']:.4f}\n")
+                    
+                    f.write("\n")
+        except Exception as e:
+            print(f"Error saving augment prediction text: {e}")
